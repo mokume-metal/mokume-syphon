@@ -71,10 +71,6 @@ jobs:
           assert urls == 1 and sums == 1, f"pin を書き換えられなかった (url={urls} checksum={sums})"
           path.write_text(source)
           PY
-          # 手元の成果物があると Package.swift はそちらを見るので、退けてから確かめる
-          rm -rf Frameworks/Syphon.xcframework
-          swift package purge-cache
-          swift build
 
       - name: Commit, tag and release
         env:
@@ -94,3 +90,13 @@ jobs:
             --notes "\`Syphon.xcframework.zip\` の checksum: \`$CHECKSUM\`
 
           この tag の \`Package.swift\` は、この資産を指している。"
+
+      # **release を作った後に確かめる。** 資産が上がるまで pin は解決しようがないので、
+      # 順序はこれしか無い。落ちたら run が赤くなり、出た版の不備が黙って通らない
+      - name: Verify the released pin resolves
+        run: |
+          set -euo pipefail
+          # 手元の成果物があると Package.swift はそちらを見るので、退けてから確かめる
+          rm -rf Frameworks/Syphon.xcframework
+          swift package purge-cache
+          swift build
