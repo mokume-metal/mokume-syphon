@@ -7,9 +7,12 @@
 
 version = 1
 
-# submodule の宣言そのもの。TOML でもコメントでもない書式なのでヘッダを持てない
+# ヘッダを持たせたくないファイル。`#` のコメントは書けるが、道具の入口や設定の
+# 先頭 2 行が帰属の宣言で埋まるのは読みづらい。**添えファイル (`.license`) は使わない** —
+# あれはヘッダを持てないファイルのための最後の手段で、ここに並ぶものはどれも該当しない
+# ([#6](https://github.com/mokume-metal/mokume-syphon/issues/6))。本体の mokume も同じ形。
 [[annotations]]
-path = [".gitmodules"]
+path = [".gitmodules", ".gitignore", "Makefile"]
 SPDX-FileCopyrightText = "2026 mokume-metal"
 SPDX-License-Identifier = "MIT"
 
