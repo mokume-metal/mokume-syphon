@@ -1,9 +1,13 @@
 # SPDX-FileCopyrightText: 2026 mokume-metal
 # SPDX-License-Identifier: MIT
 #
-# 版を出す。**このワークフローがやるのは資産を焼いて Release に添えるところまで**で、
-# Package.swift の pin の書き換えは人が PR にする — 自動で self-pin のコミットを積む
-# 形は、要ると分かってから足す (mokume の ADR-0008: 実害 → Issue → 機構)。
+# 版を出す。**資産を焼くのと pin を張り替えるのは、同じ 1 回でなければならない。**
+#
+# xcodebuild の出力はビット単位では再現しないので、別の機会に焼いた資産は別の
+# checksum になる。だから「先に checksum を書いてから焼く」も「焼いてから後で
+# 書く」も成立しない — 後者は**その tag の Package.swift が壊れたまま**になる
+# (利用者はその tag を引く)。焼いた値をそのまま同じコミットへ書き、そこへ tag を
+# 打つ。この 1 本が短いのはそのためで、人が間に入る余地を作らない。
 name: Release
 
 on:
@@ -28,25 +32,65 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
       - name: Build Syphon.xcframework
         run: bash scripts/build-syphon.sh
+
       - name: Zip and checksum
         id: asset
         run: |
+          set -euo pipefail
           cd Frameworks
           zip -qr Syphon.xcframework.zip Syphon.xcframework
           echo "checksum=$(swift package compute-checksum Syphon.xcframework.zip)" >> "$GITHUB_OUTPUT"
-      - name: Create release
+
+      # 焼いた資産を指すように書き換える。**この tag を引いた人が使うのはこの値。**
+      - name: Pin the manifest to this asset
+        env:
+          TAG: ${{ inputs.tag }}
+          CHECKSUM: ${{ steps.asset.outputs.checksum }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib, re
+          tag, checksum = os.environ["TAG"], os.environ["CHECKSUM"]
+          path = pathlib.Path("Package.swift")
+          source = path.read_text()
+          url = (
+              "https://github.com/mokume-metal/mokume-syphon/releases/download/"
+              f"{tag}/Syphon.xcframework.zip"
+          )
+          source, urls = re.subn(
+              r'url:\n?\s*"https://github\.com/mokume-metal/mokume-syphon/releases/download/[^"]*"',
+              f'url:\n            "{url}"', source)
+          source, sums = re.subn(r'checksum: "[0-9a-f]{64}"', f'checksum: "{checksum}"', source)
+          # 書き換わらなかったら止める。黙って古い資産を指した版を出さないため
+          assert urls == 1 and sums == 1, f"pin を書き換えられなかった (url={urls} checksum={sums})"
+          path.write_text(source)
+          PY
+          # 手元の成果物があると Package.swift はそちらを見るので、退けてから確かめる
+          rm -rf Frameworks/Syphon.xcframework
+          swift package purge-cache
+          swift build
+
+      - name: Commit, tag and release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
           CHECKSUM: ${{ steps.asset.outputs.checksum }}
         run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Package.swift
+          git commit -m "chore(release): $TAG の資産へ pin を張り替える"
+          git push origin HEAD:main
           gh release create "$TAG" Frameworks/Syphon.xcframework.zip \
+            --target "$(git rev-parse HEAD)" \
             --title "$TAG" \
-            --notes "Syphon.xcframework の checksum: \`$CHECKSUM\`
+            --notes "\`Syphon.xcframework.zip\` の checksum: \`$CHECKSUM\`
 
-          Package.swift の binaryTarget をこの資産へ張り替える PR を出す。"
-          echo "::notice::checksum=$CHECKSUM"
+          この tag の \`Package.swift\` は、この資産を指している。"

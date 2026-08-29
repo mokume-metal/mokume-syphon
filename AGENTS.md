@@ -34,8 +34,10 @@ Issue の起こし方・分類・コメントの置き場・コミットと PR �
 ## 版の張り方
 
 - mokume への pin は **`.upToNextMinor`** (0.x の間は minor で壊れうる。mokume の ADR-0024 決定 9)
-- 版を出すと `Package.swift` の `binaryTarget` の url と checksum が新しい Release の資産を指す。
-  **書き換えは PR にする** — 自動で self-pin のコミットを積む形は、要ると分かってから足す
+- **版を出すのは `Release` ワークフロー 1 本** (`workflow_dispatch` で tag を渡す)。焼く・pin を
+  張り替える・tag を打つを**同じ 1 回で**やる。`xcodebuild` の出力はビット単位では再現しないので、
+  焼き直せば checksum は変わる — 「焼いてから後で PR で書き換える」形にすると、
+  **その tag の `Package.swift` が壊れたまま**になり、それを引くのは利用者である
 
 ## 覚えておくこと (実測)
 
