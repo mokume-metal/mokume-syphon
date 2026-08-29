@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: 2026 mokume-metal
+# SPDX-License-Identifier: MIT
+#
+# 検査の実体は make ci-check に集約する。ここに足したくなったら、まず Makefile へ
+# 足してこのジョブは呼ぶだけを保つ (ローカルと CI の乖離を構造的に不可能にする)。
+name: CI
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci-check:
+    # macOS ランナー。mokume が macOS 26 / Metal 4 を前提に置いているので Linux では
+    # ビルドできない。Syphon.xcframework も Xcode が要る
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      # Xcode.app を選ぶ。既定の Command Line Tools では xcodebuild archive が通らない
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      # 上流の変更が無ければ焼き直さない。焼くのに数分掛かる
+      - name: Get Syphon commit
+        id: syphon
+        run: echo "hash=$(git submodule status Vendor/Syphon-Framework | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+      - name: Cache Syphon.xcframework
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: Frameworks/Syphon.xcframework
+          key: syphon-${{ steps.syphon.outputs.hash }}-${{ hashFiles('scripts/build-syphon.sh') }}-${{ runner.os }}
+      - name: Build Syphon.xcframework
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-syphon.sh
+      - name: Install tools
+        run: pipx install reuse && pipx inject reuse chardet
+      - run: make ci-check

@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: 2026 mokume-metal
+# SPDX-License-Identifier: MIT
+#
+# 版を出す。**このワークフローがやるのは資産を焼いて Release に添えるところまで**で、
+# Package.swift の pin の書き換えは人が PR にする — 自動で self-pin のコミットを積む
+# 形は、要ると分かってから足す (mokume の ADR-0008: 実害 → Issue → 機構)。
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '出す版 (例 v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      - name: Build Syphon.xcframework
+        run: bash scripts/build-syphon.sh
+      - name: Zip and checksum
+        id: asset
+        run: |
+          cd Frameworks
+          zip -qr Syphon.xcframework.zip Syphon.xcframework
+          echo "checksum=$(swift package compute-checksum Syphon.xcframework.zip)" >> "$GITHUB_OUTPUT"
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          CHECKSUM: ${{ steps.asset.outputs.checksum }}
+        run: |
+          gh release create "$TAG" Frameworks/Syphon.xcframework.zip \
+            --title "$TAG" \
+            --notes "Syphon.xcframework の checksum: \`$CHECKSUM\`
+
+          Package.swift の binaryTarget をこの資産へ張り替える PR を出す。"
+          echo "::notice::checksum=$CHECKSUM"

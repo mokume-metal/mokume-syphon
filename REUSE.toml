@@ -1,0 +1,24 @@
+# REUSE (https://reuse.software) の帰属宣言。
+#
+# 原則は各ファイルの SPDX ヘッダで宣言し、**ヘッダを持てないものだけ**をここに書く。
+# 数が増えていくファイル群をワイルドカードで包まないのは mokume と同じ方針だが、
+# 上流をそのまま抱える submodule だけは例外にしてある — あそこにあるファイルは
+# 1 つ残らず Syphon のもので、こちらが書き足すことは無いためである。
+
+version = 1
+
+# submodule の宣言そのもの。TOML でもコメントでもない書式なのでヘッダを持てない
+[[annotations]]
+path = [".gitmodules"]
+SPDX-FileCopyrightText = "2026 mokume-metal"
+SPDX-License-Identifier = "MIT"
+
+# 上流の Syphon Framework。手を入れないので、こちらのヘッダは 1 つも足さない。
+#
+# **3 条項として扱う。** 上流はリポジトリの License.txt が 3 条項・各ソースの先頭が
+# 2 条項という 2 通りの告知を持つが、配るのは全ファイルを束ねた 1 つのバイナリで、
+# その全体に対する宣言は License.txt である (THIRD_PARTY_LICENSES.md に経緯を書いた)。
+[[annotations]]
+path = ["Vendor/Syphon-Framework/**"]
+SPDX-FileCopyrightText = "2010 bangnoise (Tom Butterworth) & vade (Anton Marini)"
+SPDX-License-Identifier = "BSD-3-Clause"
