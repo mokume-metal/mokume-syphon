@@ -40,13 +40,6 @@ struct SyphonRoundTripTests {
         }
     }
 
-    // MARK: - 束の形
-
-    @Test("束は 1 つで、名前をそのまま持つ")
-    func plugin_keeps_name() {
-        #expect(SyphonPlugin(sending: "mokume test").sendingName == "mokume test")
-    }
-
     // MARK: - 受け手から見える
 
     @Test("送出した絵が受け手から見え、組み込みの出口が出す絵と一致する")
@@ -154,5 +147,27 @@ struct SyphonRoundTripTests {
             rgba[index + 2] = bgra[index]
         }
         return (width, height, rgba)
+    }
+}
+
+/// GPU を要さない検査。**門の外に置く** — 束の形を見るだけのものまで
+/// `RenderDevice.isAvailable` の門の内側に置くと、GPU の無い CI では
+/// **振る舞いについて何ひとつ確かめないまま緑になる** ([#1])。
+///
+/// [#1]: https://github.com/mokume-metal/mokume-syphon/issues/1
+@Suite("束の形")
+struct SyphonPluginShapeTests {
+    @Test("名前をそのまま持つ")
+    func plugin_keeps_name() {
+        #expect(SyphonPlugin(sending: "mokume test").sendingName == "mokume test")
+    }
+
+    @Test("束の写しが増えても、出口は 1 つのまま")
+    func copies_share_one_outlet() {
+        let plugin = SyphonPlugin(sending: "mokume test")
+        let copy = plugin
+        // 値型なので写せてしまうが、写しごとにサーバーが立つと受け手の一覧が
+        // 同じ名前で埋まる。出口は束を作った時点の 1 つを共有する
+        #expect(plugin.sender === copy.sender)
     }
 }
