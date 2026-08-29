@@ -33,7 +33,7 @@ let syphon: Target =
         name: "Syphon",
         url:
             "https://github.com/mokume-metal/mokume-syphon/releases/download/v0.1.0/Syphon.xcframework.zip",
-        checksum: "0000000000000000000000000000000000000000000000000000000000000000")
+        checksum: "6cbac82c514d8e9a9e5f08ff7e0ff0276990b198d744818617fa08a29b855fc2")
 
 let package = Package(
     name: "mokume-syphon",
