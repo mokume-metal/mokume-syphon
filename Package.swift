@@ -32,8 +32,8 @@ let syphon: Target =
     : .binaryTarget(
         name: "Syphon",
         url:
-            "https://github.com/mokume-metal/mokume-syphon/releases/download/v0.1.0/Syphon.xcframework.zip",
-        checksum: "6cbac82c514d8e9a9e5f08ff7e0ff0276990b198d744818617fa08a29b855fc2")
+            "https://github.com/mokume-metal/mokume-syphon/releases/download/v0.2.0/Syphon.xcframework.zip",
+        checksum: "fb63d9522bf92a46e3a9463183366a4e7225a7b509569409a80821b084d68495")
 
 let package = Package(
     name: "mokume-syphon",
