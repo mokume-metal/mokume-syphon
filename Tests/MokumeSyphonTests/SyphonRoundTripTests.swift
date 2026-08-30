@@ -58,7 +58,7 @@ struct SyphonRoundTripTests {
         // **同じプロセスで受けるときはサーバーの素性から直に繋ぐ** (別プロセスから
         // 一覧に現れることは Examples/SendHeadless で確かめている)
         let description = try #require(
-            plugin.sender.serverDescription, "1 フレーム進めてもサーバーが立っていない")
+            plugin.sender?.serverDescription, "1 フレーム進めてもサーバーが立っていない")
 
         let device = try #require(MTLCreateSystemDefaultDevice())
         let client = SyphonMetalClient(
@@ -81,7 +81,7 @@ struct SyphonRoundTripTests {
         #expect(arrived.height == expected.height)
         // **バイト列そのものを #expect に渡さない。** 食い違ったときに数万個の数字が
         // 出力へ流れ、どこが違うのかがかえって読めなくなる。要約だけを比べる
-        let mismatch = Self.firstMismatch(arrived.bytes, expected.bytes)
+        let mismatch = firstMismatch(arrived.bytes, expected.bytes)
         #expect(
             mismatch == nil,
             """
@@ -104,27 +104,13 @@ struct SyphonRoundTripTests {
 
         for _ in 0..<300 { try runtime.advance() }
 
-        #expect(plugin.sender.resourcesMade == 1, "フレームごとに置き場を作り直している")
+        #expect(plugin.sender?.resourcesMade == 1, "フレームごとに置き場を作り直している")
         #expect(
-            plugin.sender.failure == nil,
-            "300 フレームの間に転んだ: \(plugin.sender.failure ?? "")")
+            plugin.sender?.failure == nil,
+            "300 フレームの間に転んだ: \(plugin.sender?.failure ?? "")")
     }
 
     // MARK: - 助け
-
-    /// 食い違いの要約 — 一致していれば `nil`。
-    private static func firstMismatch(_ lhs: [UInt8], _ rhs: [UInt8]) -> (
-        index: Int, differing: Int
-    )? {
-        guard lhs.count == rhs.count else { return (0, max(lhs.count, rhs.count)) }
-        var first: Int?
-        var differing = 0
-        for index in lhs.indices where lhs[index] != rhs[index] {
-            if first == nil { first = index }
-            differing += 1
-        }
-        return first.map { ($0, differing) }
-    }
 
     /// 受けたテクスチャを、突き合わせられる形 (左上原点・RGBA の並び) にする。
     ///
