@@ -46,7 +46,7 @@ let package = Package(
         // 0.x の間は minor で壊れうるので upToNextMinor で張る
         // (mokume の ADR-0024 決定 9)
         .package(
-            url: "https://github.com/mokume-metal/mokume.git", .upToNextMinor(from: "0.4.0"))
+            url: "https://github.com/mokume-metal/mokume.git", .upToNextMinor(from: "0.7.0"))
     ],
     targets: [
         syphon,
