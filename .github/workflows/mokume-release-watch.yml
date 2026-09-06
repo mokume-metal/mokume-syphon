@@ -1,0 +1,185 @@
+# SPDX-FileCopyrightText: 2026 mokume-metal
+# SPDX-License-Identifier: MIT
+#
+# 上流 mokume が pin の範囲の外へ出ていないかを定期検査する (#12)。
+#
+# **per-PR の検査 (ci.yml) には置けない。** 上流が版を出す出来事はこちらの PR の内容と
+# 独立に起きるので、`pull_request` を契機に走るものでは原理的に捕まえられない。加えて、
+# ci-check に混ぜると上流が版を出した瞬間に**無関係な全 PR が赤くなる**し、検査に
+# ネットワークと gh 認証が要ることになって、Makefile 冒頭の「ローカルと CI の乖離を
+# 構造的に不可能にする」を自分で破る。時計を持つ独立した workflow が要る
+# (mokume の .github/workflows/ruleset-drift.yml と同じ判断)。
+#
+# **契機で振る舞いを変えない。** 写し元が push 契機で起票を控えたのは「定義を merge した
+# 直後にまだ適用していない」のが正常な状態だったからで、ここで検知する「上流が版を出した
+# のに追随していない」は正常な状態ではない。いつ気付いても直す必要がある。
+#
+# **判定を Linux に置いているのは課金のため。** 追随が要らない日 (ほとんどの日) に macOS
+# ランナーを起こさない。
+#
+# 判定は scripts/check-mokume-pin.sh、発信は scripts/report-mokume-update.sh が持つ。
+# ここに分岐を書かないのは、YAML に埋めたロジックは単体テストで固定できないためである
+# (判定の検査は Tests/MokumeSyphonTests/MokumePinCheckTests.swift)。
+
+name: mokume release watch
+
+on:
+  schedule:
+    # 日次 02:41 UTC (≒ 11:41 JST)。毎時 0 分はランナーが混むので外す
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# verify は数分掛かる。schedule と手動起動が重なったときに二重で発信しないよう、
+# 後から来たほうを待たせる (打ち消さない — 待たせれば dedupe が効く)
+concurrency:
+  group: mokume-release-watch
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      # step の output は自動では job の output にならない。ここで上げないと verify から読めない
+      outdated: ${{ steps.check.outputs.outdated }}
+      current: ${{ steps.check.outputs.current }}
+      latest: ${{ steps.check.outputs.latest }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: pin と上流の最新版を照合する
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          bash scripts/check-mokume-pin.sh
+          status=$?
+          set -e
+          # **終了コードを 3 通りに読み分ける。** 「遅れている」と「異常」を同じコードに
+          # すると、gh の失敗や読み取りの壊れが「追随が要る」として起票される
+          case "$status" in
+            0) echo "追随している — 何もしない" ;;
+            10 | 20) echo "追随が要る (終了コード $status)" ;;
+            *)
+              echo "判定できなかった (終了コード $status)" >&2
+              exit "$status"
+              ;;
+          esac
+
+  verify:
+    needs: detect
+    if: needs.detect.outputs.outdated == 'true'
+    # 上流は macOS 26 / Metal 4 を前提に置いているので Linux ではビルドできない
+    runs-on: macos-latest
+    permissions:
+      contents: read # checkout
+      issues: write # 追随が要ることの起票・追記
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      # キャッシュの key は ci.yml と同一にする。上流 mokume の版は含まれないので、
+      # 版が上がってもキャッシュはそのまま効く
+      - name: Get Syphon commit
+        id: syphon
+        run: echo "hash=$(git submodule status Vendor/Syphon-Framework | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Syphon.xcframework
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: Frameworks/Syphon.xcframework
+          key: syphon-${{ steps.syphon.outputs.hash }}-${{ hashFiles('scripts/build-syphon.sh') }}-${{ runner.os }}
+
+      - name: Build Syphon.xcframework
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-syphon.sh
+
+      - name: Install tools
+        run: pipx install reuse && pipx inject reuse chardet
+
+      # **この run の作業ツリーだけを書き換える。** commit も push もしない。
+      # 書き換えが 0 件のまま古い pin で検査を回すと「新しい版で動く」という嘘の Issue が
+      # 立つので、release.yml と同じく件数を assert して止める
+      - name: pin を最新版へ張り替える (この run の中だけ)
+        env:
+          LATEST: ${{ needs.detect.outputs.latest }}
+        run: |
+          python3 - "$LATEST" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          latest = sys.argv[1]
+          path = pathlib.Path("Package.swift")
+          text = path.read_text()
+          pattern = r'(mokume-metal/mokume\.git",\s*\.upToNextMinor\(from: ")[^"]*(")'
+          text, count = re.subn(pattern, lambda m: m.group(1) + latest + m.group(2), text)
+          assert count == 1, f"pin の書き換えが {count} 件 (1 件であるべき)"
+          path.write_text(text)
+          print(f"pin を {latest} に張り替えた")
+          PY
+
+      # 検査の入口は make ci-check の 1 つに保つ。build と test だけに割ると
+      # 「動作チェック」の定義が ci-check と別に 2 つできる
+      - name: 新しい版で検査する
+        id: trial
+        run: |
+          set +e
+          make ci-check 2>&1 | tee trial.log
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      # **対照。** 赤が出たとき「新しい版で壊れた」のか「ランナーの Xcode や上流 Syphon が
+      # 動いた」のかを分けられないと、mokume と無関係な赤で「追随できない」Issue が立つ
+      - name: いまの pin でも落ちるかを確かめる
+        id: baseline
+        if: steps.trial.outputs.status != '0'
+        run: |
+          git checkout -- Package.swift
+          # **焼いたものを捨ててから回す。** 版を戻したまま増分ビルドすると、新しい版で
+          # 焼いたオブジェクトが古い版のモジュールとリンクされ、pin とは無関係な
+          # undefined symbol で必ず落ちる (手元で実測。0.7.0 は circle などの受け口を
+          # 広げたので、0.4.x 時代のオブジェクトが古いシンボルを参照して解決できない)。
+          # **常に赤い対照は対照にならない** — すべての赤が fail-both に化ける
+          make clean
+          set +e
+          make ci-check 2>&1 | tee baseline.log
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: 追随が要ることを発信する
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT: ${{ needs.detect.outputs.current }}
+          LATEST: ${{ needs.detect.outputs.latest }}
+          TRIAL: ${{ steps.trial.outputs.status }}
+          BASELINE: ${{ steps.baseline.outputs.status }}
+        run: |
+          if [ "$TRIAL" = "0" ]; then
+            verdict=pass
+          elif [ "${BASELINE:-0}" = "0" ]; then
+            verdict=fail
+          else
+            verdict=fail-both
+          fi
+          bash scripts/report-mokume-update.sh "$CURRENT" "$LATEST" "$verdict" trial.log
+
+      # 発信の後に落とす。Actions の履歴にも赤が残らないと、Issue を閉じた後に
+      # 「いつから追随できているか」を run から読めない
+      - name: 検査の結果
+        env:
+          LATEST: ${{ needs.detect.outputs.latest }}
+          TRIAL: ${{ steps.trial.outputs.status }}
+        run: |
+          if [ "$TRIAL" != "0" ]; then
+            echo "mokume $LATEST で make ci-check が落ちた (起票された Issue を見る)" >&2
+          else
+            echo "mokume $LATEST への追随がまだである (起票された Issue を見る)" >&2
+          fi
+          exit 1
