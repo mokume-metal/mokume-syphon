@@ -128,12 +128,17 @@ jobs:
           PY
 
       # 検査の入口は make ci-check の 1 つに保つ。build と test だけに割ると
-      # 「動作チェック」の定義が ci-check と別に 2 つできる
+      # 「動作チェック」の定義が ci-check と別に 2 つできる。
+      #
+      # **ログは作業ツリーの外へ書く (#19)。** ci-check は reuse lint を含み、reuse は
+      # 作業ツリーのすべてのファイルに著作権情報を要求するので、SPDX ヘッダを持たない
+      # ログをルートに置くと**自分が作ったファイルで自分の検査が落ちる**。対照も同じ
+      # 理由で落ちるため、判定が必ず fail-both に化けて本当の赤を見逃す
       - name: 新しい版で検査する
         id: trial
         run: |
           set +e
-          make ci-check 2>&1 | tee trial.log
+          make ci-check 2>&1 | tee "$RUNNER_TEMP/trial.log"
           echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       # **対照。** 赤が出たとき「新しい版で壊れた」のか「ランナーの Xcode や上流 Syphon が
@@ -150,7 +155,7 @@ jobs:
           # **常に赤い対照は対照にならない** — すべての赤が fail-both に化ける
           make clean
           set +e
-          make ci-check 2>&1 | tee baseline.log
+          make ci-check 2>&1 | tee "$RUNNER_TEMP/baseline.log"
           echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       - name: 追随が要ることを発信する
@@ -168,7 +173,7 @@ jobs:
           else
             verdict=fail-both
           fi
-          bash scripts/report-mokume-update.sh "$CURRENT" "$LATEST" "$verdict" trial.log
+          bash scripts/report-mokume-update.sh "$CURRENT" "$LATEST" "$verdict" "$RUNNER_TEMP/trial.log"
 
       # 発信の後に落とす。Actions の履歴にも赤が残らないと、Issue を閉じた後に
       # 「いつから追随できているか」を run から読めない
