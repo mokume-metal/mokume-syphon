@@ -38,6 +38,13 @@ Issue の起こし方・分類・コメントの置き場・コミットと PR �
   張り替える・tag を打つを**同じ 1 回で**やる。`xcodebuild` の出力はビット単位では再現しないので、
   焼き直せば checksum は変わる — 「焼いてから後で PR で書き換える」形にすると、
   **その tag の `Package.swift` が壊れたまま**になり、それを引くのは利用者である
+- **`README.md` の使用例に書かれた 2 つの pin も `Release` が張る。手で直さない。**
+  あそこが説明しているのは**利用者が自分の `Package.swift` に書く 2 行**で、利用者が引くのは
+  released 版である。`main` の値へ揃えると、README が名指しした released 版が要求する mokume と
+  食い違い、**書いてあるとおりに写しても解決しなくなる** ([#13](https://github.com/mokume-metal/mokume-syphon/issues/13) で実際に起きた)
+- **pin を張り替えて merge しただけでは、利用者には何も届かない。** 利用者が引くのは released 版
+  なので、追随を届けるには版を出すところまでが 1 つの仕事である
+  ([#11](https://github.com/mokume-metal/mokume-syphon/issues/11) はそこで止まっていた)
 
 ## CI の緑が意味しないこと
 

@@ -157,10 +157,16 @@ compose_body() {
 **手元で 3 つとも判定できる。**
 
 1. `bash scripts/check-mokume-pin.sh` が緑 (`Package.swift` の pin が最新版を含む範囲にある)
-2. `README.md` の使用例に書かれた pin も同じ値 (機械的に結ばれていないので手で揃える。#13)
+2. **`README.md` の使用例は触らない** — あの 2 行は `Release` ワークフローが released 版から張る。
+   `main` の値へ手で揃えると、README が名指しした released 版が要求する mokume と食い違い、
+   **書いてあるとおりに写しても解決しなくなる** (#13 で実際に起きた)
 3. **手元で `make ci-check` が緑** — CI の緑では送出を確かめられないため、ここだけは人の手が要る
 
 張り替える PR に `Closes` でこの Issue を書く。**この Issue は自動では閉じない。**
+
+**追随が利用者へ届くのは、次の版を出したときである。** 利用者が引くのは released 版なので、
+merge しただけでは released 版は古い mokume に張られたまま残る — #11 はそれで、`main` を直して
+close した後も詰まりは解消していなかった (#13)。
 BODY
 
   if [ -n "$run_url" ]; then
