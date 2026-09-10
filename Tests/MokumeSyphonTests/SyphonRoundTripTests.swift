@@ -51,14 +51,15 @@ struct SyphonRoundTripTests {
         let runtime = try SketchRuntime(sketch: FlatSketch(), gpu: try RenderDevice())
         defer { runtime.closePlugins() }
 
-        // サーバーは最初のフレームで立つ (装置を渡された絵から取るため)
-        try runtime.advance()
-
+        // サーバーは最初の絵が届いたときに立つ (装置を渡された絵から取るため)。
+        // **何フレーム目かは上流の都合で動く**ので回数では待たない (#26)
+        //
         // 一覧からは探さない。Syphon の公示は自分のプロセスへ返ってこないので、
         // **同じプロセスで受けるときはサーバーの素性から直に繋ぐ** (別プロセスから
         // 一覧に現れることは Examples/SendHeadless で確かめている)
         let description = try #require(
-            plugin.sender?.serverDescription, "1 フレーム進めてもサーバーが立っていない")
+            advanceUntilPublished(runtime) { plugin.sender?.serverDescription },
+            "60 フレーム進めてもサーバーが立たない")
 
         let device = try #require(MTLCreateSystemDefaultDevice())
         let client = SyphonMetalClient(
