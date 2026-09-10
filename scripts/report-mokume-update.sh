@@ -40,9 +40,10 @@ readonly REPO="mokume-metal/mokume-syphon"
 readonly TITLE="chore: mokume の新しい版に追随する"
 
 # 起票と同時に付ける印。完了条件 (下の「解消の判定」) を本文へ焼き込んでいるので、
-# 議論を待たずに着手できる。**このリポジトリの語彙は verify: machine / verify: human で、
-# 上流の verify: triaged は存在しない** — 渡すと gh issue create ごと失敗する (#14)
-readonly VERIFY_LABEL="verify: machine"
+# 議論を待たずに着手できる。**語彙は上流と同じ 1 種**で、ラベルが表すのは「完了条件が固まって
+# いる」ことだけである (mokume の ADR-0031 決定 1。ここが揃える理由は ADR-0026 決定 1 の第 1 段)。
+# 綴りが上流とずれると、渡した瞬間に gh issue create ごと失敗する (#14)
+readonly VERIFY_LABEL="verify: triaged"
 
 # 「いまどの版まで知らせたか」を機械が読む印。**散文からは読まない** — 本文の言い回しを
 # 直した日に読めなくなり、同じ版で毎日コメントが増える。印は 1 箇所だけに持つ
@@ -153,7 +154,7 @@ compose_body() {
   cat <<'BODY'
 ## どうなれば解消か
 
-`verify: machine` — 手元で 3 つとも判定できる。
+**手元で 3 つとも判定できる。**
 
 1. `bash scripts/check-mokume-pin.sh` が緑 (`Package.swift` の pin が最新版を含む範囲にある)
 2. `README.md` の使用例に書かれた pin も同じ値 (機械的に結ばれていないので手で揃える。#13)
