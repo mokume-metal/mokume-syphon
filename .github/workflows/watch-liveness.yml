@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: 2026 mokume-metal
+# SPDX-License-Identifier: MIT
+#
+# 上流の版を検知する workflow (mokume-release-watch.yml) が、まだ生きているかを見張る (#16)。
+#
+# **public リポジトリの scheduled workflow は、60 日活動が無いと GitHub が自動で無効化する。**
+# 止まったことは無音で、活動が戻っても自分では戻らない — 人が enable を押すまで検知は
+# 死んだままになる。#12 が塞いだ失敗 (上流の版に取り残されたことに誰も気付かない) と
+# 同じ形の穴が、検知の機構そのものに開いている。
+#
+# **この workflow は `schedule` を持たない。** 持てば見張り自身が同じ穴に落ちる。契機を
+# push に置いているので、自動無効化の対象にならない (無効化されるのは scheduled workflow
+# だけである)。代わりに、無活動の 60 日の**間**は何も見ていない — 見ているのは「活動が
+# 戻ったのに検知が死んだまま」であり、そちらが放っておくと永続する側の穴である。
+#
+# **ci.yml には足さない。** あちらは冒頭で「検査の実体は make ci-check に集約する」と
+# 名乗っている。この判定はネットワークと gh 認証を要するので ci-check には入れられず
+# (mokume-release-watch.yml を per-PR に置けないのと同じ理由)、ci.yml に足せばその
+# 不変条件を自分で破ることになる。
+#
+# **pull_request では走らせない。** PR の内容と無関係な赤で merge を塞ぐのは筋が違う。
+# 押すのは merge の後で、そのとき人はまだその場にいる。
+#
+# 判定は scripts/check-watch-liveness.sh が持ち、ここには分岐を置かない (YAML に埋めた
+# ロジックは単体テストで固定できない。検査は
+# Tests/MokumeSyphonTests/WatchLivenessCheckTests.swift)。
+# 止まっていれば非 0 で落ち、戻し方はスクリプトの出力が名乗る。
+
+name: watch liveness
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read # checkout
+  actions: read # workflow の state を読む
+
+jobs:
+  liveness:
+    # fork では scheduled workflow が既定で無効なので、見張っても disabled_fork が出るだけ
+    if: ${{ !github.event.repository.fork }}
+    # 判定は gh に問い合わせるだけ。macOS ランナーを起こす理由が無い
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 検知の workflow が止まっていないかを見る
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/check-watch-liveness.sh
