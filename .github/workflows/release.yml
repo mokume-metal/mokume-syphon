@@ -48,7 +48,13 @@ jobs:
           echo "checksum=$(swift package compute-checksum Syphon.xcframework.zip)" >> "$GITHUB_OUTPUT"
 
       # 焼いた資産を指すように書き換える。**この tag を引いた人が使うのはこの値。**
-      - name: Pin the manifest to this asset
+      #
+      # README の使用例に書かれた 2 つの pin も、ここで同じ 1 回に張り替える。あそこが
+      # 説明しているのは**利用者が自分の Package.swift に書く 2 行**で、利用者が引くのは
+      # released 版である。`main` の値へ手で揃えると、README が名指しした released 版が
+      # 要求する mokume と食い違い、**書いてあるとおりに写しても解決しなくなる** (#13)。
+      # 両者が食い違わないと言えるのは、版を出すこの瞬間だけである。
+      - name: Pin the manifest and the README example to this asset
         env:
           TAG: ${{ inputs.tag }}
           CHECKSUM: ${{ steps.asset.outputs.checksum }}
@@ -57,6 +63,11 @@ jobs:
           python3 - <<'PY'
           import os, pathlib, re
           tag, checksum = os.environ["TAG"], os.environ["CHECKSUM"]
+          # 版の綴りを先に確かめる。README には数字がそのまま載るので、読めない tag を
+          # 渡されたまま進むと使用例が壊れた版を出すことになる
+          version = tag[1:] if tag.startswith("v") else tag
+          assert re.fullmatch(r"\d+\.\d+\.\d+", version), f"版の綴りとして読めない tag: {tag}"
+
           path = pathlib.Path("Package.swift")
           source = path.read_text()
           url = (
@@ -70,6 +81,26 @@ jobs:
           # 書き換わらなかったら止める。黙って古い資産を指した版を出さないため
           assert urls == 1 and sums == 1, f"pin を書き換えられなかった (url={urls} checksum={sums})"
           path.write_text(source)
+
+          # README が勧める mokume は、**いま出そうとしている版が要求する mokume** である。
+          # 一致させる相手が Package.swift なのはこの瞬間だけで、それはこのコミットが
+          # そのまま tag になるからである
+          upstream = re.search(
+              r'mokume\.git", \.upToNextMinor\(from: "([^"]*)"\)', source)
+          assert upstream, "Package.swift の mokume への pin を読めない"
+
+          readme = pathlib.Path("README.md")
+          example = readme.read_text()
+          # mokume\.git" は mokume-syphon\.git" には当たらないので撃ち分けられる
+          example, mokume_pins = re.subn(
+              r'(mokume\.git", \.upToNextMinor\(from: ")[^"]*(")',
+              rf'\g<1>{upstream.group(1)}\g<2>', example)
+          example, self_pins = re.subn(
+              r'(mokume-syphon\.git", \.upToNextMinor\(from: ")[^"]*(")',
+              rf'\g<1>{version}\g<2>', example)
+          assert mokume_pins == 1 and self_pins == 1, (
+              f"README の使用例を書き換えられなかった (mokume={mokume_pins} self={self_pins})")
+          readme.write_text(example)
           PY
 
       - name: Commit, tag and release
@@ -81,8 +112,8 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Package.swift
-          git commit -m "chore(release): $TAG の資産へ pin を張り替える"
+          git add Package.swift README.md
+          git commit -m "chore(release): $TAG の資産へ pin と使用例を張り替える"
           git push origin HEAD:main
           gh release create "$TAG" Frameworks/Syphon.xcframework.zip \
             --target "$(git rev-parse HEAD)" \
@@ -100,3 +131,45 @@ jobs:
           rm -rf Frameworks/Syphon.xcframework
           swift package purge-cache
           swift build
+
+      # **README の使用例そのものが解決するかを見る。** 上の swift build が確かめるのは
+      # このリポジトリの Package.swift であって、利用者が写す 2 行ではない。#13 で壊れたのは
+      # 後者だけで、前者は最後まで緑だった。
+      #
+      # 2 行は**再導出せず README から切り出す** — 利用者が写すのはその 2 行そのものである。
+      # 組む先を作業ツリーの外に置くのは #20 と同じ理由 (検査の副産物を git に載せない)。
+      # ここも release の後でしか確かめられない — README は今回出した tag を名指ししている
+      - name: Verify the README example resolves
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib, re, subprocess, sys, tempfile
+
+          readme = pathlib.Path("README.md").read_text()
+          lines = re.findall(
+              r'^\s*\.package\(url: "https://github\.com/mokume-metal/.*$', readme, re.M)
+          # 2 行であることを要求する。切り出せなくなったら黙って「解決した」に倒さない
+          assert len(lines) == 2, f"README の使用例から 2 行を切り出せなかった ({len(lines)} 行)"
+
+          root = pathlib.Path(tempfile.mkdtemp(dir=os.environ.get("RUNNER_TEMP") or None))
+          (root / "Sources" / "ReadmeExample").mkdir(parents=True)
+          (root / "Sources" / "ReadmeExample" / "Empty.swift").write_text("")
+          # 版が解決するかだけを見るので、中身は空でよい。床は本体と同じ (mokume の ADR-0009)
+          (root / "Package.swift").write_text(
+              "// swift-tools-version: 6.2\n"
+              "import PackageDescription\n\n"
+              "let package = Package(\n"
+              '    name: "ReadmeExample",\n'
+              '    platforms: [.macOS("26.0")],\n'
+              "    dependencies: [\n"
+              + "\n".join(f"        {line.strip()}" for line in lines) + "\n"
+              "    ],\n"
+              '    targets: [.target(name: "ReadmeExample")]\n'
+              ")\n")
+
+          print("README の使用例:\n" + "\n".join(lines))
+          done = subprocess.run(["swift", "package", "resolve"], cwd=root)
+          if done.returncode != 0:
+              sys.exit("README の使用例が解決しない — 写した人が同じところで詰まる (#13)")
+          print("ok: README の使用例は解決する")
+          PY
