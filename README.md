@@ -20,7 +20,7 @@ SPDX-License-Identifier: MIT
 // Package.swift
 dependencies: [
     .package(url: "https://github.com/mokume-metal/mokume.git", .upToNextMinor(from: "0.7.0")),
-    .package(url: "https://github.com/mokume-metal/mokume-syphon.git", .upToNextMinor(from: "0.2.0")),
+    .package(url: "https://github.com/mokume-metal/mokume-syphon.git", .upToNextMinor(from: "0.3.0")),
 ],
 targets: [
     .executableTarget(
