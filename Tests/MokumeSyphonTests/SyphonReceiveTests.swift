@@ -56,10 +56,11 @@ struct SyphonReceiveTests {
         let runtime = try SketchRuntime(sketch: FlatSketch(), gpu: try RenderDevice())
         defer { runtime.closePlugins() }
 
-        // サーバーは最初のフレームで立つ (装置を渡された絵から取るため)
-        try runtime.advance()
+        // サーバーは最初の絵が届いたときに立つ (装置を渡された絵から取るため)。
+        // **何フレーム目かは上流の都合で動く**ので回数では待たない (#26)
         let description = try #require(
-            sending.sender?.serverDescription, "1 フレーム進めてもサーバーが立っていない")
+            advanceUntilPublished(runtime) { sending.sender?.serverDescription },
+            "60 フレーム進めてもサーバーが立たない")
 
         // 一覧からは探さない。Syphon の公示は自分のプロセスへ返ってこない
         let receiver = SyphonReceiver(serverDescription: description)
@@ -97,10 +98,11 @@ struct SyphonReceiveTests {
 
         let runtime = try SketchRuntime(sketch: FlatSketch(), gpu: try RenderDevice())
         defer { runtime.closePlugins() }
-        try runtime.advance()
 
         let receiver = SyphonReceiver(
-            serverDescription: try #require(sending.sender?.serverDescription))
+            serverDescription: try #require(
+                advanceUntilPublished(runtime) { sending.sender?.serverDescription },
+                "60 フレーム進めてもサーバーが立たない"))
         try receiver.open()
         defer { receiver.close() }
 
@@ -123,10 +125,11 @@ struct SyphonReceiveTests {
 
         let runtime = try SketchRuntime(sketch: FlatSketch(), gpu: try RenderDevice())
         defer { runtime.closePlugins() }
-        try runtime.advance()
 
         let receiver = SyphonReceiver(
-            serverDescription: try #require(sending.sender?.serverDescription))
+            serverDescription: try #require(
+                advanceUntilPublished(runtime) { sending.sender?.serverDescription },
+                "60 フレーム進めてもサーバーが立たない"))
         try receiver.open()
         defer { receiver.close() }
 
