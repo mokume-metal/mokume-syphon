@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 mokume-metal
+# SPDX-License-Identifier: MIT
+#
+# 上流 mokume の新しい版を PR として受け取る (#30)。
+#
+# **mokume-release-watch.yml (#12) は残してある。** あちらは「追随が要る」ことを Issue
+# 1 本で知らせ、新版で make ci-check を回した結果と対照を載せる。こちらは pin を張り替える
+# PR を作るところまでを受け持つ。Dependabot の PR は `Closes #N` を持てないので、検知の
+# Issue とは手で閉じる関係になる。重複が実害になるなら、検知を畳むかは別に決める
+# (Dependabot が実際に動くと確認してから)。
+#
+# **`swift` だけを見る。** `github-actions` を足さないのは、専用機の self-hosted runner を
+# このリポジトリでも使うようになると、第三者の action の更新 PR が専用機で走る経路に
+# なるため (#31)。
+#
+# **pin を張り替えて merge しただけでは、利用者には何も届かない** (AGENTS.md「版の張り方」)。
+# 届けるには、merge の後に Release ワークフローで版を出す。
+version: 2
+updates:
+  - package-ecosystem: swift
+    directory: "/"
+    schedule:
+      # 上流はほぼ毎日版を出す
+      interval: daily
+    # .upToNextMinor の範囲内のパッチは、CI が毎回 Package.resolved 無しで最新を解決する
+    # ので黙って取り込まれる。pin の張り替えを要するのは minor 越えだけで、パッチごとに
+    # PR を立てるとノイズになる。依存は mokume 1 本なので、依存名は指定しない
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch"]
+    # PR タイトルがそのまま squash のマージコミットになる。Conventional Commits の形にする
+    commit-message:
+      prefix: "chore(deps)"
