@@ -38,6 +38,12 @@ Issue の起こし方・分類・コメントの置き場・コミットと PR �
   張り替える・tag を打つを**同じ 1 回で**やる。`xcodebuild` の出力はビット単位では再現しないので、
   焼き直せば checksum は変わる — 「焼いてから後で PR で書き換える」形にすると、
   **その tag の `Package.swift` が壊れたまま**になり、それを引くのは利用者である
+- **`Release` は `main` へ push しない。** `main` は PR 必須・`ci-check` 必須で保護しており、
+  Actions の `GITHUB_TOKEN` はそれを通れず (GitHub Actions は bypass actor に入れられない)、
+  Actions が作った PR は CI を起こさない。だから tag の commit を `release/<tag>` ブランチとして
+  push し、**版を出す仕事の最後は、その head から `main` への追随 PR を出すこと**である
+  (run の Summary にコマンドが出る)。head が tag の commit そのものなので、squash merge すれば
+  `main` の tree は tag の tree と一致する ([#40](https://github.com/mokume-metal/mokume-syphon/issues/40))
 - **`README.md` の使用例に書かれた 2 つの pin も `Release` が張る。手で直さない。**
   あそこが説明しているのは**利用者が自分の `Package.swift` に書く 2 行**で、利用者が引くのは
   released 版である。`main` の値へ揃えると、README が名指しした released 版が要求する mokume と
