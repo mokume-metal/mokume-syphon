@@ -12,7 +12,7 @@ version = 1
 # あれはヘッダを持てないファイルのための最後の手段で、ここに並ぶものはどれも該当しない
 # ([#6](https://github.com/mokume-metal/mokume-syphon/issues/6))。本体の mokume も同じ形。
 [[annotations]]
-path = [".gitmodules", ".gitignore", "Makefile"]
+path = [".gitmodules", ".gitignore", "Makefile", ".github/rulesets/*.json"]
 SPDX-FileCopyrightText = "2026 mokume-metal"
 SPDX-License-Identifier = "MIT"
 
