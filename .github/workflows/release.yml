@@ -8,6 +8,14 @@
 # 書く」も成立しない — 後者は**その tag の Package.swift が壊れたまま**になる
 # (利用者はその tag を引く)。焼いた値をそのまま同じコミットへ書き、そこへ tag を
 # 打つ。この 1 本が短いのはそのためで、人が間に入る余地を作らない。
+#
+# **main へは push しない。** main は PR 必須・ci-check 必須で保護されており、この
+# ワークフローの GITHUB_TOKEN はそれを通れない (GitHub Actions は bypass actor に入れられず、
+# App の鍵も置いていない — mokume の ADR-0044)。かといって Actions に PR を作らせても、
+# GITHUB_TOKEN で作った PR は他のワークフローを起こさないので、必須の ci-check が付かず
+# 詰まる。だから tag の commit を release/<tag> ブランチとして push し、main への追随は
+# 人 (エージェント) の名義で出す PR に任せる (#40)。head が tag の commit そのものなので、
+# squash merge した後の main の tree は tag の tree と一致する。
 name: Release
 
 on:
@@ -114,13 +122,27 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Package.swift README.md
           git commit -m "chore(release): $TAG の資産へ pin と使用例を張り替える"
-          git push origin HEAD:main
+          # tag を打つ commit を main とは別のブランチに置く。tag の commit が無ければ
+          # 追随 PR の head が取れない。失敗して再実行するときは、先に release/$TAG を消す
+          git push origin "HEAD:refs/heads/release/$TAG"
           gh release create "$TAG" Frameworks/Syphon.xcframework.zip \
             --target "$(git rev-parse HEAD)" \
             --title "$TAG" \
             --notes "\`Syphon.xcframework.zip\` の checksum: \`$CHECKSUM\`
 
           この tag の \`Package.swift\` は、この資産を指している。"
+
+          # main への追随。ここで PR は作らない (作っても CI が起きない)。この PR を出すのが
+          # 版を出す仕事の最後で、打たない間 main の README が 1 版古いままになる
+          {
+            echo "### main への追随 PR を出す"
+            echo
+            echo '```'
+            echo "gh pr create --base main --head release/$TAG \\"
+            echo "  --title \"chore(release): $TAG の資産へ pin と使用例を張り替える\" \\"
+            echo "  --body \"$TAG の tag の commit を main へ取り込む。\""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # **release を作った後に確かめる。** 資産が上がるまで pin は解決しようがないので、
       # 順序はこれしか無い。落ちたら run が赤くなり、出た版の不備が黙って通らない
