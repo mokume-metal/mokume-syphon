@@ -18,7 +18,7 @@ Issue の起こし方・分類・コメントの置き場・コミットと PR �
 | --- | --- | --- |
 | 設計判断の正典 | `docs/decisions/` の ADR | **持たない。** 判断は mokume の ADR に従い、従えない事情ができたら mokume 側に Issue を立てる |
 | 検査 | `make ci-check` (14 本) | `make ci-check` (**build / test / reuse lint の 3 本**)。足すのは実害が出てから |
-| PR の identity | App identity 必須 | **同じ**。承認が要る変更は誰の手であれ App の identity で作る |
+| PR の identity | メンテナ自身の `gh` 認証で作り、承認は要求しない ([ADR-0044](https://github.com/mokume-metal/mokume/blob/main/docs/decisions/0044-maintainer-authored-prs-without-approval-gate.md)) | **同じ**。`main-protection` の承認数は 0 で、App は入れていない |
 | バイナリ | 1 つもコミットしない | **同じ。** `Syphon.xcframework` は Release の資産で配り、git には入れない |
 
 ## Syphon.xcframework の扱い
