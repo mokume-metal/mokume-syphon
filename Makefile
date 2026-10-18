@@ -4,8 +4,11 @@
 .DEFAULT_GOAL := ci-check
 .PHONY: setup syphon clean-syphon build test reuse-lint ci-check clean
 
-setup: syphon ## submodule を引き、Syphon.xcframework を焼く
+# syphon を前提に置かない。make は前提をレシピより先に走らせるので、clone 直後
+# (submodule が空) だと焼くほうが先に落ちる (#25)
+setup: ## submodule を引き、Syphon.xcframework を焼く
 	git submodule update --init --recursive
+	$(MAKE) syphon
 
 # SwiftPM は manifest の評価結果を内容ハッシュでキャッシュし、ファイルの出現・消失では
 # 無効化しない。焼いた後・消した後は purge-cache で評価し直させる
