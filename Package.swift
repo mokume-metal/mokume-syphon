@@ -46,7 +46,7 @@ let package = Package(
         // 0.x の間は minor で壊れうるので upToNextMinor で張る
         // (mokume の ADR-0024 決定 9)
         .package(
-            url: "https://github.com/mokume-metal/mokume.git", .upToNextMinor(from: "0.35.0"))
+            url: "https://github.com/mokume-metal/mokume.git", .upToNextMinor(from: "0.48.0"))
     ],
     targets: [
         syphon,
@@ -55,14 +55,18 @@ let package = Package(
             dependencies: [.product(name: "mokume", package: "mokume"), "Syphon"],
             swiftSettings: .mokume),
         .testTarget(
-            name: "MokumeSyphonTests", dependencies: ["MokumeSyphon", "Syphon"],
+            name: "MokumeSyphonTests",
+            dependencies: [
+                "MokumeSyphon", "Syphon", .product(name: "MokumeHost", package: "mokume"),
+            ],
             swiftSettings: .mokume),
         // 例。product には含めない — 利用者へ配るものではなく、使い方を示すもの
         .executableTarget(
             name: "SendExample", dependencies: ["MokumeSyphon"], path: "Examples/Send",
             swiftSettings: .mokume),
         .executableTarget(
-            name: "SendHeadlessExample", dependencies: ["MokumeSyphon"],
+            name: "SendHeadlessExample",
+            dependencies: ["MokumeSyphon", .product(name: "MokumeHost", package: "mokume")],
             path: "Examples/SendHeadless", swiftSettings: .mokume),
         .executableTarget(
             name: "ReceiveExample", dependencies: ["MokumeSyphon"], path: "Examples/Receive",

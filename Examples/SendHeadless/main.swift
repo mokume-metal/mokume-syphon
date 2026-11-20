@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import Foundation
+import MokumeHost
 import MokumeSyphon
 import mokume
 
@@ -14,7 +15,7 @@ import mokume
 // ## なぜ `@main` を使わないか
 //
 // `Sketch` の既定の入口 (`SketchApplication`) は必ず窓を開く。窓は要らないので、
-// **フレームを進める入口 (`SketchRuntime.advance()`) を自分で叩く**。本体は
+// **窓を持たない実行 (`MokumeHost` の `HeadlessRun`) でフレームを自分で進める**。本体は
 // 「進める判断」と「窓」を分けてあるので、描かれる中身はこちらでも変わらない。
 //
 // ## `RunLoop` を回すのが要点
@@ -41,19 +42,21 @@ final class HeadlessSketch: Sketch {
 let seconds = Double(CommandLine.arguments.dropFirst().first ?? "") ?? 60
 
 do {
-    let runtime = try SketchRuntime(sketch: HeadlessSketch(), gpu: try RenderDevice())
-    let interval = 1.0 / Double(runtime.sketch.settings.frameRate)
+    let sketch = HeadlessSketch()
+    let interval = 1.0 / Double(sketch.settings.frameRate)
     let deadline = Date(timeIntervalSinceNow: seconds)
     print("Syphon へ \(seconds) 秒ぶん送る (窓は開かない)")
-    while Date() < deadline {
-        try runtime.advance()
-        // 待つ間も run loop を回す。sleep で待つと受け手から見えない
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: interval))
-    }
-    // 差込口を畳んでから終わる。畳まないままプロセスが消えても実害は無いが、
+    // `with` を抜けるときに差込口が畳まれる。畳まないままプロセスが消えても実害は無いが、
     // 「閉じるまでが差込口の寿命」を例で示しておく
-    runtime.closePlugins()
-    print("終わった (\(runtime.frameCount) フレーム)")
+    let frames = try HeadlessRun.with(sketch) { run in
+        while Date() < deadline {
+            try run.advance()
+            // 待つ間も run loop を回す。sleep で待つと受け手から見えない
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: interval))
+        }
+        return run.frameCount
+    }
+    print("終わった (\(frames) フレーム)")
 } catch {
     FileHandle.standardError.write(Data("走らせられなかった: \(error)\n".utf8))
     exit(1)

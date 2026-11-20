@@ -3,6 +3,7 @@
 
 import Foundation
 import Metal
+import MokumeHost
 import Syphon
 import Testing
 import mokume
@@ -48,48 +49,47 @@ struct SyphonRoundTripTests {
         FlatSketch.declared = [plugin]
         defer { FlatSketch.declared = [] }
 
-        let runtime = try SketchRuntime(sketch: FlatSketch(), gpu: try RenderDevice())
-        defer { runtime.closePlugins() }
+        try HeadlessRun.with(FlatSketch()) { runtime in
+            // サーバーは最初の絵が届いたときに立つ (装置を渡された絵から取るため)。
+            // **何フレーム目かは上流の都合で動く**ので回数では待たない (#26)
+            //
+            // 一覧からは探さない。Syphon の公示は自分のプロセスへ返ってこないので、
+            // **同じプロセスで受けるときはサーバーの素性から直に繋ぐ** (別プロセスから
+            // 一覧に現れることは Examples/SendHeadless で確かめている)
+            let description = try #require(
+                advanceUntilPublished(runtime) { plugin.sender?.serverDescription },
+                "60 フレーム進めてもサーバーが立たない")
 
-        // サーバーは最初の絵が届いたときに立つ (装置を渡された絵から取るため)。
-        // **何フレーム目かは上流の都合で動く**ので回数では待たない (#26)
-        //
-        // 一覧からは探さない。Syphon の公示は自分のプロセスへ返ってこないので、
-        // **同じプロセスで受けるときはサーバーの素性から直に繋ぐ** (別プロセスから
-        // 一覧に現れることは Examples/SendHeadless で確かめている)
-        let description = try #require(
-            advanceUntilPublished(runtime) { plugin.sender?.serverDescription },
-            "60 フレーム進めてもサーバーが立たない")
+            let device = try #require(MTLCreateSystemDefaultDevice())
+            let client = SyphonMetalClient(
+                serverDescription: description, device: device, options: nil, newFrameHandler: nil)
+            defer { client.stop() }
 
-        let device = try #require(MTLCreateSystemDefaultDevice())
-        let client = SyphonMetalClient(
-            serverDescription: description, device: device, options: nil, newFrameHandler: nil)
-        defer { client.stop() }
+            // 繋いでから、届くまで進める
+            var received: (width: Int, height: Int, bytes: [UInt8])?
+            for _ in 0..<120 where received == nil {
+                try runtime.advance()
+                RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
+                received = autoreleasepool { client.newFrameImage().map(Self.read) }
+            }
 
-        // 繋いでから、届くまで進める
-        var received: (width: Int, height: Int, bytes: [UInt8])?
-        for _ in 0..<120 where received == nil {
-            try runtime.advance()
-            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
-            received = autoreleasepool { client.newFrameImage().map(Self.read) }
+            let arrived = try #require(received, "繋いだのに 1 枚も届かなかった")
+            // 組み込みの出口が出す絵 (画像の書き出しと同じ道)
+            let expected = try runtime.displayImage()
+
+            #expect(arrived.width == expected.width)
+            #expect(arrived.height == expected.height)
+            // **バイト列そのものを #expect に渡さない。** 食い違ったときに数万個の数字が
+            // 出力へ流れ、どこが違うのかがかえって読めなくなる。要約だけを比べる
+            let mismatch = firstMismatch(arrived.bytes, expected.bytes)
+            #expect(
+                mismatch == nil,
+                """
+                受けた絵が組み込みの出口の絵と違う \
+                (向き・成分の並び・出力段のどれかがずれている): \
+                \(mismatch.map { "\($0.differing) バイトが不一致・最初は \($0.index) 番目" } ?? "")
+                """)
         }
-
-        let arrived = try #require(received, "繋いだのに 1 枚も届かなかった")
-        // 組み込みの出口が出す絵 (画像の書き出しと同じ道)
-        let expected = try runtime.target.encodeForDisplay()
-
-        #expect(arrived.width == expected.width)
-        #expect(arrived.height == expected.height)
-        // **バイト列そのものを #expect に渡さない。** 食い違ったときに数万個の数字が
-        // 出力へ流れ、どこが違うのかがかえって読めなくなる。要約だけを比べる
-        let mismatch = firstMismatch(arrived.bytes, expected.bytes)
-        #expect(
-            mismatch == nil,
-            """
-            受けた絵が組み込みの出口の絵と違う \
-            (向き・成分の並び・出力段のどれかがずれている): \
-            \(mismatch.map { "\($0.differing) バイトが不一致・最初は \($0.index) 番目" } ?? "")
-            """)
     }
 
     // MARK: - 長く回しても増えない
@@ -100,15 +100,14 @@ struct SyphonRoundTripTests {
         FlatSketch.declared = [plugin]
         defer { FlatSketch.declared = [] }
 
-        let runtime = try SketchRuntime(sketch: FlatSketch(), gpu: try RenderDevice())
-        defer { runtime.closePlugins() }
+        try HeadlessRun.with(FlatSketch()) { runtime in
+            for _ in 0..<300 { try runtime.advance() }
 
-        for _ in 0..<300 { try runtime.advance() }
-
-        #expect(plugin.sender?.resourcesMade == 1, "フレームごとに置き場を作り直している")
-        #expect(
-            plugin.sender?.failure == nil,
-            "300 フレームの間に転んだ: \(plugin.sender?.failure ?? "")")
+            #expect(plugin.sender?.resourcesMade == 1, "フレームごとに置き場を作り直している")
+            #expect(
+                plugin.sender?.failure == nil,
+                "300 フレームの間に転んだ: \(plugin.sender?.failure ?? "")")
+        }
     }
 
     // MARK: - 助け
