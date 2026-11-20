@@ -102,13 +102,15 @@ var plugins: [any Plugin] { [SyphonPlugin(sending: "MySketch", receiving: "Camer
 ### 窓を持たない実行でも送れる
 
 `Examples/SendHeadless` が最短の形を示す。`Sketch` の既定の入口は必ず窓を開くので、
-窓が要らないときは**フレームを進める入口を自分で叩く**。
+窓が要らないときは**窓を持たない実行 (`MokumeHost` の `HeadlessRun`) でフレームを自分で進める**
+(`.product(name: "MokumeHost", package: "mokume")` を依存に足し、`import MokumeHost` する)。
 
 ```swift
-let runtime = try SketchRuntime(sketch: MySketch(), gpu: try RenderDevice())
-while … {
-    try runtime.advance()
-    RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0 / 60))
+try HeadlessRun.with(MySketch()) { run in   // 抜けるときに差込口が畳まれる
+    while … {
+        try run.advance()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0 / 60))
+    }
 }
 ```
 

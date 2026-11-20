@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 mokume-metal
 // SPDX-License-Identifier: MIT
 
-import mokume
+import MokumeHost
 
 /// サーバーが立つまでフレームを進め、立ったら公示の内容を返す — 立たなければ `nil`。
 ///
@@ -18,7 +18,7 @@ import mokume
 ///
 /// [#26]: https://github.com/mokume-metal/mokume-syphon/issues/26
 func advanceUntilPublished(
-    _ runtime: SketchRuntime, upTo limit: Int = 60, _ description: () -> [String: Any]?
+    _ runtime: HeadlessRun, upTo limit: Int = 60, _ description: () -> [String: Any]?
 ) throws -> [String: Any]? {
     for _ in 0..<limit {
         try runtime.advance()

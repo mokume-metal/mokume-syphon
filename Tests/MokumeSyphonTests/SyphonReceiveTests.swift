@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import Foundation
+import MokumeHost
 import Testing
 import mokume
 
@@ -53,39 +54,38 @@ struct SyphonReceiveTests {
         FlatSketch.declared = [sending]
         defer { FlatSketch.declared = [] }
 
-        let runtime = try SketchRuntime(sketch: FlatSketch(), gpu: try RenderDevice())
-        defer { runtime.closePlugins() }
+        try HeadlessRun.with(FlatSketch()) { runtime in
+            // サーバーは最初の絵が届いたときに立つ (装置を渡された絵から取るため)。
+            // **何フレーム目かは上流の都合で動く**ので回数では待たない (#26)
+            let description = try #require(
+                advanceUntilPublished(runtime) { sending.sender?.serverDescription },
+                "60 フレーム進めてもサーバーが立たない")
 
-        // サーバーは最初の絵が届いたときに立つ (装置を渡された絵から取るため)。
-        // **何フレーム目かは上流の都合で動く**ので回数では待たない (#26)
-        let description = try #require(
-            advanceUntilPublished(runtime) { sending.sender?.serverDescription },
-            "60 フレーム進めてもサーバーが立たない")
+            // 一覧からは探さない。Syphon の公示は自分のプロセスへ返ってこない
+            let receiver = SyphonReceiver(serverDescription: description)
+            try receiver.open()
+            defer { receiver.close() }
 
-        // 一覧からは探さない。Syphon の公示は自分のプロセスへ返ってこない
-        let receiver = SyphonReceiver(serverDescription: description)
-        try receiver.open()
-        defer { receiver.close() }
+            for _ in 0..<120 where receiver.received == nil {
+                try runtime.advance()
+                RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
+                receiver.supply()
+            }
 
-        for _ in 0..<120 where receiver.received == nil {
-            try runtime.advance()
-            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
-            receiver.supply()
+            let arrived = try #require(receiver.received, "繋いだのに 1 枚も届かなかった")
+            let expected = try runtime.displayImage()
+
+            #expect(arrived.width == expected.width)
+            #expect(arrived.height == expected.height)
+            let mismatch = firstMismatch(arrived.bytes, expected.bytes)
+            #expect(
+                mismatch == nil,
+                """
+                受け取った絵が送り手の絵と違う \
+                (向き・成分の並び・不透明度の扱いのどれかがずれている): \
+                \(mismatch.map { "\($0.differing) バイトが不一致・最初は \($0.index) 番目" } ?? "")
+                """)
         }
-
-        let arrived = try #require(receiver.received, "繋いだのに 1 枚も届かなかった")
-        let expected = try runtime.target.encodeForDisplay()
-
-        #expect(arrived.width == expected.width)
-        #expect(arrived.height == expected.height)
-        let mismatch = firstMismatch(arrived.bytes, expected.bytes)
-        #expect(
-            mismatch == nil,
-            """
-            受け取った絵が送り手の絵と違う \
-            (向き・成分の並び・不透明度の扱いのどれかがずれている): \
-            \(mismatch.map { "\($0.differing) バイトが不一致・最初は \($0.index) 番目" } ?? "")
-            """)
     }
 
     // MARK: - 長く回しても増えない
@@ -96,23 +96,22 @@ struct SyphonReceiveTests {
         FlatSketch.declared = [sending]
         defer { FlatSketch.declared = [] }
 
-        let runtime = try SketchRuntime(sketch: FlatSketch(), gpu: try RenderDevice())
-        defer { runtime.closePlugins() }
+        try HeadlessRun.with(FlatSketch()) { runtime in
+            let receiver = SyphonReceiver(
+                serverDescription: try #require(
+                    advanceUntilPublished(runtime) { sending.sender?.serverDescription },
+                    "60 フレーム進めてもサーバーが立たない"))
+            try receiver.open()
+            defer { receiver.close() }
 
-        let receiver = SyphonReceiver(
-            serverDescription: try #require(
-                advanceUntilPublished(runtime) { sending.sender?.serverDescription },
-                "60 フレーム進めてもサーバーが立たない"))
-        try receiver.open()
-        defer { receiver.close() }
+            for _ in 0..<300 {
+                try runtime.advance()
+                receiver.supply()
+            }
 
-        for _ in 0..<300 {
-            try runtime.advance()
-            receiver.supply()
+            #expect(receiver.resourcesMade == 1, "フレームごとに繋ぎ直している")
+            #expect(receiver.failure == nil, "300 フレームの間に転んだ: \(receiver.failure ?? "")")
         }
-
-        #expect(receiver.resourcesMade == 1, "フレームごとに繋ぎ直している")
-        #expect(receiver.failure == nil, "300 フレームの間に転んだ: \(receiver.failure ?? "")")
     }
 
     // MARK: - 新しい絵が来ていないフレーム
@@ -123,31 +122,30 @@ struct SyphonReceiveTests {
         FlatSketch.declared = [sending]
         defer { FlatSketch.declared = [] }
 
-        let runtime = try SketchRuntime(sketch: FlatSketch(), gpu: try RenderDevice())
-        defer { runtime.closePlugins() }
+        try HeadlessRun.with(FlatSketch()) { runtime in
+            let receiver = SyphonReceiver(
+                serverDescription: try #require(
+                    advanceUntilPublished(runtime) { sending.sender?.serverDescription },
+                    "60 フレーム進めてもサーバーが立たない"))
+            try receiver.open()
+            defer { receiver.close() }
 
-        let receiver = SyphonReceiver(
-            serverDescription: try #require(
-                advanceUntilPublished(runtime) { sending.sender?.serverDescription },
-                "60 フレーム進めてもサーバーが立たない"))
-        try receiver.open()
-        defer { receiver.close() }
+            for _ in 0..<120 where receiver.received == nil {
+                try runtime.advance()
+                RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
+                receiver.supply()
+            }
+            let arrived = try #require(receiver.received, "繋いだのに 1 枚も届かなかった")
 
-        for _ in 0..<120 where receiver.received == nil {
-            try runtime.advance()
-            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
-            receiver.supply()
+            // 送り手を進めずに受け側だけ回す — 新しい絵は 1 枚も来ない
+            for _ in 0..<10 { receiver.supply() }
+
+            // 絵そのものを #expect に渡さない (食い違うと数万個の数字が出力へ流れる)
+            let kept = try #require(receiver.received, "新しい絵が来ていないのに、前の 1 枚が失われた")
+            #expect(
+                firstMismatch(kept.bytes, arrived.bytes) == nil,
+                "据え置かれたはずの絵が別物になっている")
         }
-        let arrived = try #require(receiver.received, "繋いだのに 1 枚も届かなかった")
-
-        // 送り手を進めずに受け側だけ回す — 新しい絵は 1 枚も来ない
-        for _ in 0..<10 { receiver.supply() }
-
-        // 絵そのものを #expect に渡さない (食い違うと数万個の数字が出力へ流れる)
-        let kept = try #require(receiver.received, "新しい絵が来ていないのに、前の 1 枚が失われた")
-        #expect(
-            firstMismatch(kept.bytes, arrived.bytes) == nil,
-            "据え置かれたはずの絵が別物になっている")
     }
 }
 
