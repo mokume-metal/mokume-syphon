@@ -138,7 +138,7 @@ final class SyphonReceiver: Inlet {
     /// | --- | --- | --- |
     /// | 成分の並び | BGRA → RGBA | Syphon が抱えるのは BGRA |
     /// | 不透明度 | 乗算済み → 割り戻す | ``DisplayImage`` の定義が straight |
-    /// | 原点 | そのまま | Syphon のテクスチャは行 0 が上端 |
+    /// | 原点 | 行を逆順に | Syphon の IOSurface は 1 行目が下端 (OpenGL の規約。#68) |
     ///
     /// ## mokume 同士の往復では、半透明のところだけ値が動く
     ///
@@ -153,11 +153,16 @@ final class SyphonReceiver: Inlet {
     private static func picture(from texture: any MTLTexture) -> DisplayImage {
         let width = texture.width
         let height = texture.height
-        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let rowBytes = width * 4
+        var bytes = [UInt8](repeating: 0, count: rowBytes * height)
+        // テクスチャの 1 行目 (下端) を絵の最終行へ置く — 行ごとに読んで上下を付け替える
         bytes.withUnsafeMutableBytes { destination in
-            texture.getBytes(
-                destination.baseAddress!, bytesPerRow: width * 4,
-                from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+            for row in 0..<height {
+                texture.getBytes(
+                    destination.baseAddress! + (height - 1 - row) * rowBytes,
+                    bytesPerRow: rowBytes,
+                    from: MTLRegionMake2D(0, row, width, 1), mipmapLevel: 0)
+            }
         }
         for index in stride(from: 0, to: bytes.count, by: 4) {
             let blue = bytes[index]

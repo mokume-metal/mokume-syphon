@@ -116,6 +116,10 @@ struct SyphonRoundTripTests {
     ///
     /// Syphon が抱えるのは BGRA なので、**ここで並べ替える**。並べ替えが要ることは
     /// 送り手側の欠陥ではない (受け渡しの形式が決めている)。
+    ///
+    /// **行も逆順にする。** Syphon の IOSurface は OpenGL の規約で 1 行目が下端なので、
+    /// Metal で直に読むと上下が逆に見える (#68)。向きそのものの正しさは
+    /// ``SyphonOpenGLOrientationTests`` が OpenGL の受け手で見ている。
     private static func read(_ texture: any MTLTexture) -> (
         width: Int, height: Int, bytes: [UInt8]
     ) {
@@ -132,7 +136,7 @@ struct SyphonRoundTripTests {
             rgba[index] = bgra[index + 2]
             rgba[index + 2] = bgra[index]
         }
-        return (width, height, rgba)
+        return (width, height, reversingRows(rgba, width: width, height: height))
     }
 }
 
