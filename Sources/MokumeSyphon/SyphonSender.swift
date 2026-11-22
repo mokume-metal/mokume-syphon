@@ -76,9 +76,11 @@ final class SyphonSender: Outlet {
             server.publishFrameTexture(
                 texture, on: commands,
                 imageRegion: NSRect(x: 0, y: 0, width: texture.width, height: texture.height),
-                // 本体の絵は行 0 が上端 (書き出す PNG と同じ向き) なので、
-                // Metal 座標では反転していない
-                flipped: false)
+                // 本体の絵は行 0 が上端 (書き出す PNG と同じ向き)。一方 Syphon の
+                // IOSurface は OpenGL の規約で **1 行目が下端**として読まれる
+                // (MadMapper などの相手の大半がそう)。だから反転して渡す (#68)。
+                // 反転すると上流の速い blit 経路は使われず、描画経路で写す
+                flipped: true)
             commands.commit()
             failure = nil
         }

@@ -75,3 +75,8 @@ GPU を要さない検査 (束の形) は門の外に置いてあるので、そ
   false のままで、サーバーから `UpdateSurfaceID` が返っていない。ターミナル起動どうしなら
   受け取れる ([#9](https://github.com/mokume-metal/mokume-syphon/issues/9) で実測)。
   自動検査が同じプロセスの中で送受信するのは、この足枷とは別に**公示が自分へ返らない**ためである
+- **Syphon の IOSurface は 1 行目が下端として読まれる** (OpenGL の規約。MadMapper など相手の大半が
+  そう読む)。本体の絵は 1 行目が上端なので、送り手は `flipped: true` で渡し、受け手は行を逆順にする。
+  **Metal どうしの往復では向きを取り違えても一致する**ので、向きの検査は OpenGL の受け手・送り手を
+  相手役にする。読み出しは `glReadPixels` で行う — IOSurface を裏に持つテクスチャには
+  `glGetTexImage` が中身を返さない ([#68](https://github.com/mokume-metal/mokume-syphon/issues/68) で実測)
